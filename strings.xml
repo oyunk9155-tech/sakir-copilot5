@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Şakir</string>
+    <string name="acc_label">Şakir erişim</string>
+    <string name="acc_desc">Şakir\'in WhatsApp mesajını göndermesi, YouTube\'da ilk videoyu açması ve ekrandaki öğelere dokunması için gerekir.</string>
+</resources>
