@@ -15,16 +15,68 @@ jobs:
         run: |
           echo "=== Depo yapısı ==="
           find . -path ./.git -prune -o -type f -print | sort
-          echo "=== Kökteki build dosyaları ==="
-          ls -la build.gradle* 2>/dev/null || echo "kökte build.gradle yok (doğru)"
 
-      - name: Kökteki fazla build dosyasını temizle ve gerekli dosyaları doğrula
+      - name: Yanlış yüklenmiş dosyaları onar
         run: |
+          # 1) src klasörü kökte kaldıysa app/ içine taşı
+          if [ -d src ] && [ ! -d app/src ]; then
+            mkdir -p app
+            mv src app/src
+            echo "src klasörü app/ içine taşındı"
+          fi
+          # 2) Android ayarları kökteki build dosyasında kaldıysa app/ içine taşı
+          if [ ! -f app/build.gradle.kts ]; then
+            mkdir -p app
+            if [ -f build.gradle.kts ] && grep -q "android {" build.gradle.kts; then
+              mv build.gradle.kts app/build.gradle.kts
+              echo "kökteki build.gradle.kts, app/ içine taşındı"
+            else
+              cat > app/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+
+          android {
+              namespace = "com.sakir.copilot"
+              compileSdk = 34
+
+              defaultConfig {
+                  applicationId = "com.sakir.copilot"
+                  minSdk = 26
+                  targetSdk = 34
+                  versionCode = 1
+                  versionName = "1.0"
+              }
+
+              buildTypes {
+                  release {
+                      isMinifyEnabled = false
+                  }
+              }
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          }
+
+          dependencies {
+          }
+          EOF
+              echo "app/build.gradle.kts eksikti, yeniden oluşturuldu"
+            fi
+          fi
+          # 3) Kökte fazladan build dosyası kalmasın
           rm -f build.gradle build.gradle.kts
+          # 4) Zorunlu dosyalar
           test -f settings.gradle.kts || { echo "HATA: kökte settings.gradle.kts yok"; exit 1; }
-          test -f app/build.gradle.kts || { echo "HATA: app/build.gradle.kts yok"; exit 1; }
-          grep -q "android {" app/build.gradle.kts || { echo "HATA: app/build.gradle.kts içinde android bölümü yok"; exit 1; }
-          test -f app/src/main/AndroidManifest.xml || { echo "HATA: app/src/main/AndroidManifest.xml yok"; exit 1; }
+          test -f app/src/main/AndroidManifest.xml || { echo "HATA: app/src/main/AndroidManifest.xml yok (app klasörü eksik yüklenmiş)"; exit 1; }
+          test -d app/src/main/java/com/sakir/copilot || { echo "HATA: Kotlin kod klasörü yok (app/src/main/java/com/sakir/copilot)"; exit 1; }
+          echo "Yapı tamam."
 
       - uses: actions/setup-java@v4
         with:
