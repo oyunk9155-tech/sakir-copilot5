@@ -16,8 +16,31 @@ jobs:
           echo "=== Depo yapısı ==="
           find . -path ./.git -prune -o -type f -print | sort
 
-      - name: Yanlış yüklenmiş dosyaları onar
+      - name: Projeyi hazırla ve onar
         run: |
+          set -e
+          PROJ=.
+          # Kod klasörleri depoya çıkmadıysa, depodaki zip dosyasını aç ve oradan derle
+          if [ ! -f app/src/main/AndroidManifest.xml ]; then
+            Z=$(ls ./*.zip 2>/dev/null | head -1 || true)
+            if [ -n "$Z" ]; then
+              echo "Kod klasörleri depoda yok. Zip bulundu, açılıyor: $Z"
+              rm -rf _proj && mkdir _proj
+              unzip -q "$Z" -d _proj
+              S=$(find _proj -name settings.gradle.kts | head -1)
+              if [ -z "$S" ]; then
+                echo "HATA: zip içinde settings.gradle.kts bulunamadı. Doğru zip'i (sakir-copilot.zip) yüklediğinden emin ol."
+                exit 1
+              fi
+              PROJ=$(dirname "$S")
+            else
+              echo "HATA: depoda app/src/main/AndroidManifest.xml yok ve kökte bir .zip dosyası da yok."
+              echo "ÇÖZÜM: sakir-copilot.zip dosyasını açmadan, olduğu gibi depoya yükle (Add file > Upload files)."
+              exit 1
+            fi
+          fi
+          cd "$PROJ"
+          echo "Derlenecek klasör: $(pwd)"
           # 1) src klasörü kökte kaldıysa app/ içine taşı
           if [ -d src ] && [ ! -d app/src ]; then
             mkdir -p app
@@ -73,9 +96,10 @@ jobs:
           # 3) Kökte fazladan build dosyası kalmasın
           rm -f build.gradle build.gradle.kts
           # 4) Zorunlu dosyalar
-          test -f settings.gradle.kts || { echo "HATA: kökte settings.gradle.kts yok"; exit 1; }
-          test -f app/src/main/AndroidManifest.xml || { echo "HATA: app/src/main/AndroidManifest.xml yok (app klasörü eksik yüklenmiş)"; exit 1; }
+          test -f settings.gradle.kts || { echo "HATA: settings.gradle.kts yok"; exit 1; }
+          test -f app/src/main/AndroidManifest.xml || { echo "HATA: app/src/main/AndroidManifest.xml yok"; exit 1; }
           test -d app/src/main/java/com/sakir/copilot || { echo "HATA: Kotlin kod klasörü yok (app/src/main/java/com/sakir/copilot)"; exit 1; }
+          echo "PROJ=$(pwd)" >> "$GITHUB_ENV"
           echo "Yapı tamam."
 
       - uses: actions/setup-java@v4
@@ -88,9 +112,11 @@ jobs:
           gradle-version: 8.9
 
       - name: Build debug APK
-        run: gradle :app:assembleDebug --no-daemon
+        run: |
+          cd "$PROJ"
+          gradle :app:assembleDebug --no-daemon
 
       - uses: actions/upload-artifact@v4
         with:
           name: Sakir-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ env.PROJ }}/app/build/outputs/apk/debug/app-debug.apk
